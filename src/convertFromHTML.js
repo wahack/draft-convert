@@ -15,9 +15,13 @@ import { ContentState, CharacterMetadata, ContentBlock, genKey } from 'draft-js'
 import getSafeBodyFromHTML from './util/parseHTML';
 import rangeSort from './util/rangeSort';
 
+if (typeof (window) === 'undefined') {
+  const JSDOM = require('jsdom').JSDOM;
+  const window = (new JSDOM()).window;
+}
+
 const NBSP = '&nbsp;';
 const SPACE = ' ';
-
 // Arbitrary max indent
 const MAX_DEPTH = 4;
 
@@ -181,7 +185,7 @@ function processInlineTag(
   const styleToCheck = inlineTags[tag];
   if (styleToCheck) {
     currentStyle = currentStyle.add(styleToCheck).toOrderedSet();
-  } else if (node instanceof HTMLElement) {
+  } else if (node instanceof window.HTMLElement) {
     const htmlElement = node;
     currentStyle = currentStyle.withMutations(style => {
       if (htmlElement.style.fontWeight === 'bold') {

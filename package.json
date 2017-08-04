@@ -39,7 +39,8 @@
   },
   "dependencies": {
     "immutable": "~3.7.4",
-    "invariant": "^2.2.1"
+    "invariant": "^2.2.1",
+    "jsdom": "^11.1.0"
   },
   "devDependencies": {
     "babel-cli": "^6.10.1",
