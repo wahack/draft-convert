@@ -15,9 +15,11 @@ import { ContentState, CharacterMetadata, ContentBlock, genKey } from 'draft-js'
 import getSafeBodyFromHTML from './util/parseHTML';
 import rangeSort from './util/rangeSort';
 
+let WINDOW = typeof (window) === 'undefined' ? '' : window;
+
 if (typeof (window) === 'undefined') {
   const JSDOM = require('jsdom').JSDOM;
-  const window = (new JSDOM()).window;
+  WINDOW = (new JSDOM()).window;
 }
 
 const NBSP = '&nbsp;';
@@ -185,7 +187,7 @@ function processInlineTag(
   const styleToCheck = inlineTags[tag];
   if (styleToCheck) {
     currentStyle = currentStyle.add(styleToCheck).toOrderedSet();
-  } else if (node instanceof window.HTMLElement) {
+  } else if (node instanceof WINDOW.HTMLElement) {
     const htmlElement = node;
     currentStyle = currentStyle.withMutations(style => {
       if (htmlElement.style.fontWeight === 'bold') {
