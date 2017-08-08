@@ -409,7 +409,7 @@ function genFragment(
   // whitespace at the end so it cannot be a space character.
 
   if (child == null && inEntity && (blockType === 'atomic' || inBlock === 'atomic')) {
-    child = document.createTextNode('a');
+    child = WINDOW.document.createTextNode('a');
   }
 
   if (child != null) {
