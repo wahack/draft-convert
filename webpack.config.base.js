@@ -1,6 +1,9 @@
 const webpack = require('webpack');
 
 module.exports = {
+  node: {
+    fs: "empty"
+  },
   module: {
     loaders: [{
       test: /\.js$/,
