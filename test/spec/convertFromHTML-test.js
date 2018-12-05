@@ -6,15 +6,27 @@ import convertToHTML from '../../src/convertToHTML';
 const customBlockToHTML = {
   unstyled: {
     start: '<p>',
-    end: '</p>'
+    end: '</p>',
+  },
+};
+
+const getEntityFromContentState = (contentState, entityKey) => {
+  // compatibility shim for draft-js@0.10 entity changes
+  if (contentState.getEntity) {
+    return contentState.getEntity(entityKey);
   }
+
+  return Entity.get(entityKey);
 };
 
 describe('convertFromHTML', () => {
   const toContentState = (html, options) => {
     return convertFromHTML({
       htmlToBlock: (nodeName, node, lastList, inBlock) => {
-        if ((nodeName === 'p' || nodeName === 'div') && inBlock === 'blockquote') {
+        if (
+          (nodeName === 'p' || nodeName === 'div') &&
+          inBlock === 'blockquote'
+        ) {
           return 'blockquote';
         }
 
@@ -23,8 +35,8 @@ describe('convertFromHTML', () => {
             type: 'atomic',
             data: {
               atomicType: 'image',
-              src: node.firstChild.getAttribute('src')
-            }
+              src: node.firstChild.getAttribute('src'),
+            },
           };
         }
 
@@ -37,29 +49,33 @@ describe('convertFromHTML', () => {
         }
       },
       htmlToStyle: (nodeName, node, inlineStyle) => {
-        if (nodeName === 'span' && (node.style.fontFamily === 'Test' || node.style.fontFamily === "'Test'")) {
+        if (
+          nodeName === 'span' &&
+          (node.style.fontFamily === 'Test' ||
+            node.style.fontFamily === "'Test'")
+        ) {
           return inlineStyle.add('FONT-TEST');
         }
         return inlineStyle;
       },
-      htmlToEntity: (nodeName, node) => {
+      htmlToEntity: (nodeName, node, createEntity) => {
         if (nodeName === 'a' && node.href) {
           const href = node.href;
-          return Entity.create('LINK', 'MUTABLE', { url: href });
+          return createEntity('LINK', 'MUTABLE', { url: href });
         }
 
         if (nodeName === 'testnode') {
-          return Entity.create('TEST', 'IMMUTABLE', {
-            testAttr: node.getAttribute('test-attr')
+          return createEntity('TEST', 'IMMUTABLE', {
+            testAttr: node.getAttribute('test-attr'),
           });
         }
         if (nodeName === 'img') {
-          return Entity.create('IMAGE', 'IMMUTABLE', {
-            src: node.getAttribute('src')
+          return createEntity('IMAGE', 'IMMUTABLE', {
+            src: node.getAttribute('src'),
           });
         }
       },
-      textToEntity: text => {
+      textToEntity: (text, createEntity) => {
         const acc = [];
         const pattern = new RegExp('\\@\\w+', 'ig');
         let resultArray = pattern.exec(text);
@@ -68,11 +84,7 @@ describe('convertFromHTML', () => {
           acc.push({
             offset: resultArray.index,
             length: resultArray[0].length,
-            entity: Entity.create(
-              'AT-MENTION',
-              'IMMUTABLE',
-              { name }
-            )
+            entity: createEntity('AT-MENTION', 'IMMUTABLE', { name }),
           });
           resultArray = pattern.exec(text);
         }
@@ -81,15 +93,11 @@ describe('convertFromHTML', () => {
             offset,
             length: match.length,
             result: tag,
-            entity: Entity.create(
-              'MERGE-TAG',
-              'IMMUTABLE',
-              { tag }
-            )
+            entity: createEntity('MERGE-TAG', 'IMMUTABLE', { tag }),
           });
         });
         return acc;
-      }
+      },
     })(html, options);
   };
 
@@ -103,7 +111,9 @@ describe('convertFromHTML', () => {
       },
       entityToHTML: (entity, originalText) => {
         if (entity.type === 'TEST') {
-          return `<testnode test-attr="${entity.data.testAttr}">${originalText}</testnode>`;
+          return `<testnode test-attr="${
+            entity.data.testAttr
+          }">${originalText}</testnode>`;
         } else if (entity.type === 'AT-MENTION') {
           return `@${entity.data.name}`;
         } else if (entity.type === 'MERGE-TAG') {
@@ -153,7 +163,7 @@ describe('convertFromHTML', () => {
           return `<a href="${entity.data.url}">${originalText}</a>`;
         }
         return originalText;
-      }
+      },
     })(state);
     expect(htmlOut).toBe(htmlFixture);
   });
@@ -179,15 +189,19 @@ describe('convertFromHTML', () => {
         </ul>
       </ul>`;
     const state = toContentState(htmlFixture);
-    expect(state.blockMap.last().depth).toBe(1);  // failing, currently 0
+    expect(state.blockMap.last().depth).toBe(1); // failing, currently 0
   });
 
   it('ul with extra after', () => {
-    testFixture('<ul><li>one</li><li>two</li><li>three</li></ul><p>Some more</p>');
+    testFixture(
+      '<ul><li>one</li><li>two</li><li>three</li></ul><p>Some more</p>'
+    );
   });
 
   it('ul with extra before', () => {
-    testFixture('<p>Some leading content</p><ul><li>one</li><li>two</li><li>three</li></ul>');
+    testFixture(
+      '<p>Some leading content</p><ul><li>one</li><li>two</li><li>three</li></ul>'
+    );
   });
 
   it('converts custom entities from nodes', () => {
@@ -252,42 +266,54 @@ describe('convertFromHTML', () => {
     const html = '<p>before</p><p><br></p><p>after</p>';
     const contentState = toContentState(html, { flat: true });
     expect(contentState.getBlocksAsArray().length).toBe(3);
-    expect(convertToHTML(contentState)).toBe('<p>before</p><p></p><p>after</p>');
+    expect(convertToHTML(contentState)).toBe(
+      '<p>before</p><p></p><p>after</p>'
+    );
   });
 
   it('handles <p><br></p>', () => {
     const html = '<p>before</p><p><br/></p><p>after</p>';
     const contentState = toContentState(html);
     expect(contentState.getBlocksAsArray().length).toBe(3);
-    expect(convertToHTML(contentState)).toBe('<p>before</p><p><br/></p><p>after</p>');
+    expect(convertToHTML(contentState)).toBe(
+      '<p>before</p><p><br/></p><p>after</p>'
+    );
   });
 
   it('handles <p><strong><br><strong></p> and removes the BR when flat', () => {
     const html = '<p>before</p><p><strong><br></strong></p><p>after</p>';
     const contentState = toContentState(html, { flat: true });
     expect(contentState.getBlocksAsArray().length).toBe(3);
-    expect(convertToHTML(contentState)).toBe('<p>before</p><p></p><p>after</p>');
+    expect(convertToHTML(contentState)).toBe(
+      '<p>before</p><p></p><p>after</p>'
+    );
   });
 
   it('handles <p><strong><br><strong></p>', () => {
     const html = '<p>before</p><p><strong><br></strong></p><p>after</p>';
     const contentState = toContentState(html);
     expect(contentState.getBlocksAsArray().length).toBe(3);
-    expect(convertToHTML(contentState)).toBe('<p>before</p><p><br/></p><p>after</p>');
+    expect(convertToHTML(contentState)).toBe(
+      '<p>before</p><p><br/></p><p>after</p>'
+    );
   });
 
   it('handles <div><br></div> when other semantic tags are also present and removes the BR when flat', () => {
     const html = '<div>before</div><div><br></div><p>after</p>';
     const contentState = toContentState(html, { flat: true });
     expect(contentState.getBlocksAsArray().length).toBe(3);
-    expect(convertToHTML(contentState)).toBe('<p>before</p><p></p><p>after</p>');
+    expect(convertToHTML(contentState)).toBe(
+      '<p>before</p><p></p><p>after</p>'
+    );
   });
 
   it('handles <div><br></div> when other semantic tags are also present', () => {
     const html = '<div>before</div><div><br></div><p>after</p>';
     const contentState = toContentState(html);
     expect(contentState.getBlocksAsArray().length).toBe(3);
-    expect(convertToHTML(contentState)).toBe('<p>before</p><p><br/></p><p>after</p>');
+    expect(convertToHTML(contentState)).toBe(
+      '<p>before</p><p><br/></p><p>after</p>'
+    );
   });
 
   it('handles ul nested within block', () => {
@@ -296,7 +322,11 @@ describe('convertFromHTML', () => {
     // yield all of them as list items instead.
     const html = '<p><ul><li>one</li><li>two</li></ul></p>';
     const contentState = toContentState(html);
-    expect(contentState.getBlocksAsArray().filter(block => block.getType() === 'unordered-list-item').length).toBe(2);
+    expect(
+      contentState
+        .getBlocksAsArray()
+        .filter(block => block.getType() === 'unordered-list-item').length
+    ).toBe(2);
   });
 
   it('converts custom block types while still using defaults', () => {
@@ -333,7 +363,7 @@ describe('convertFromHTML', () => {
     expect(blocks[0].getType()).toBe('atomic');
     expect(blocks[0].characterList.size).toBe(1);
     const entityKey = blocks[0].characterList.first().entity;
-    const entity = Entity.get(entityKey);
+    const entity = getEntityFromContentState(contentState, entityKey);
     expect(entity.getType()).toBe('IMAGE');
     expect(entity.getData().src).toBe('test');
   });
@@ -344,22 +374,29 @@ describe('convertFromHTML', () => {
     const blocks = contentState.getBlocksAsArray();
     expect(blocks.length).toBe(3);
     expect(blocks[1].getType()).toBe('atomic');
-    expect(Entity.get(blocks[1].getEntityAt(0)).getType()).toBe('IMAGE');
+    expect(
+      getEntityFromContentState(
+        contentState,
+        blocks[1].getEntityAt(0)
+      ).getType()
+    ).toBe('IMAGE');
     const resultHTML = convertToHTML({
       blockToHTML: {
-        'atomic': {
+        atomic: {
           start: '<figure>',
-          end: '</figure>'
-        }
+          end: '</figure>',
+        },
       },
       entityToHTML: (entity, originalText) => {
         if (entity.type === 'IMAGE') {
           return `<img src="${entity.data.src}" />`;
         }
         return originalText;
-      }
+      },
     })(contentState);
-    expect(resultHTML).toBe('<p>test</p><figure><img src="test" /></figure><p>test</p>');
+    expect(resultHTML).toBe(
+      '<p>test</p><figure><img src="test" /></figure><p>test</p>'
+    );
   });
 
   it('handles only span and brs and all blocks are unstyled when flat', () => {
@@ -408,7 +445,7 @@ describe('convertFromHTML', () => {
   });
 
   it('handles undefined nested block types', () => {
-    const html = '<div><div>This won\'t work, first line</div></div>';
+    const html = "<div><div>This won't work, first line</div></div>";
     const contentState = toContentState(html);
     const block = contentState.getBlocksAsArray()[0];
     expect(block.getType()).toBe('unstyled');
@@ -423,8 +460,8 @@ describe('convertFromHTML', () => {
           return {
             type: block,
             data: {
-              test: true
-            }
+              test: true,
+            },
           };
         }
       }
@@ -432,7 +469,7 @@ describe('convertFromHTML', () => {
     htmlToBlock.__isMiddleware = true;
 
     const contentState = convertFromHTML({
-      htmlToBlock
+      htmlToBlock,
     })(html);
 
     const block = contentState.getBlocksAsArray()[0];
@@ -441,17 +478,31 @@ describe('convertFromHTML', () => {
 
   it('handles middleware functions when converting entities from HTML', () => {
     const html = '<p><a>test</a></p>';
-    const baseLink = next => nodeName => {
+    const baseLink = next => (nodeName, node, createEntity) => {
       if (nodeName === 'a') {
-        return Entity.create('LINK', 'IMMUTABLE', {});
+        return createEntity('LINK', 'IMMUTABLE', {});
       }
 
       return next(...arguments);
     };
-    const linkData = next => (nodeName, ...args) => {
-      const entityKey = next(nodeName, ...args);
-      if (nodeName === 'a') {
-        Entity.mergeData(entityKey, { test: true });
+    const linkData = next => (
+      nodeName,
+      node,
+      createEntity,
+      getEntity,
+      mergeEntityData,
+      ...args
+    ) => {
+      const entityKey = next(
+        nodeName,
+        node,
+        createEntity,
+        getEntity,
+        mergeEntityData,
+        ...args
+      );
+      if (entityKey && nodeName === 'a') {
+        mergeEntityData(entityKey, { test: true });
         return entityKey;
       }
 
@@ -464,7 +515,7 @@ describe('convertFromHTML', () => {
     htmlToEntity.__isMiddleware = true;
 
     const contentState = convertFromHTML({
-      htmlToEntity
+      htmlToEntity,
     })(html);
 
     const rawState = convertToRaw(contentState);
@@ -475,25 +526,25 @@ describe('convertFromHTML', () => {
 
   it('handles middleware functions when converting entities from text', () => {
     const html = '<p>test1 test2</p>';
-    const test1Search = next => text => {
-      const results = next(text);
+    const test1Search = next => (text, createEntity) => {
+      const results = next(text, createEntity);
       text.replace(/test1/g, (match, offset) => {
         results.push({
           offset,
           length: match.length,
-          entity: Entity.create('TEST1', 'IMMUTABLE', {})
+          entity: createEntity('TEST1', 'IMMUTABLE', {}),
         });
       });
 
       return results;
     };
-    const test2Search = next => text => {
-      const results = next(text);
+    const test2Search = next => (text, createEntity) => {
+      const results = next(text, createEntity);
       text.replace(/test2/g, (match, offset) => {
         results.push({
           offset,
           length: match.length,
-          entity: Entity.create('TEST2', 'IMMUTABLE', {})
+          entity: createEntity('TEST2', 'IMMUTABLE', {}),
         });
       });
 
@@ -506,7 +557,7 @@ describe('convertFromHTML', () => {
     textToEntity.__isMiddleware = true;
 
     const contentState = convertFromHTML({
-      textToEntity
+      textToEntity,
     })(html);
 
     const rawState = convertToRaw(contentState);
@@ -533,7 +584,7 @@ describe('convertFromHTML', () => {
     htmlToStyle.__isMiddleware = true;
 
     const contentState = convertFromHTML({
-      htmlToStyle
+      htmlToStyle,
     })(html);
 
     const rawState = convertToRaw(contentState);
@@ -554,8 +605,14 @@ describe('convertFromHTML', () => {
     const contentState = toContentState(html);
     const blocks = contentState.getBlocksAsArray();
     expect(blocks.length).toBe(4);
-    expect(blocks.slice(0, 2).every(block => block.getType() === 'unordered-list-item')).toBe(true);
-    expect(blocks.slice(2, 4).every(block => block.getType() === 'ordered-list-item')).toBe(true);
+    expect(
+      blocks
+        .slice(0, 2)
+        .every(block => block.getType() === 'unordered-list-item')
+    ).toBe(true);
+    expect(
+      blocks.slice(2, 4).every(block => block.getType() === 'ordered-list-item')
+    ).toBe(true);
   });
 
   it('ignores blocks that return false in htmlToBlock', () => {
@@ -566,7 +623,7 @@ describe('convertFromHTML', () => {
         if (nodeName === 'p') {
           return false;
         }
-      }
+      },
     })(html);
 
     expect(contentState.getBlocksAsArray().length).toBe(2);
@@ -580,7 +637,7 @@ describe('convertFromHTML', () => {
         if (nodeName === 'p') {
           return false;
         }
-      }
+      },
     })(html);
 
     expect(contentState.getBlocksAsArray().length).toBe(1);
@@ -595,10 +652,36 @@ describe('convertFromHTML', () => {
         if (nodeName === 'p') {
           return false;
         }
-      }
+      },
     })(html, { flat: true });
 
     expect(contentState.getBlocksAsArray().length).toBe(1);
     expect(contentState.getBlocksAsArray()[0].getText()).toBe('test1');
+  });
+
+  it('maintains the correct block key for selectionBefore and selectionAfter', () => {
+    const htmlChunks = [
+      '<p>one<br/><br/>two</p>',
+      '<div>test1<p>test2</p></div>',
+      '',
+    ];
+
+    htmlChunks.forEach(html => {
+      const contentState = convertFromHTML({
+        htmlToBlock: nodeName => {
+          if (nodeName === 'p') {
+            return false;
+          }
+        },
+      })(html, { flat: true });
+
+      const firstBlockKey = contentState.getFirstBlock().getKey();
+      expect(firstBlockKey).toBe(
+        contentState.getSelectionBefore().getStartKey()
+      );
+      expect(firstBlockKey).toBe(
+        contentState.getSelectionAfter().getStartKey()
+      );
+    });
   });
 });

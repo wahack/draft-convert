@@ -109,19 +109,19 @@ const contentState = convertFromHTML({
             return currentStyle;
         }
     },
-    htmlToEntity: (nodeName, node) => {
+    htmlToEntity: (nodeName, node, createEntity) => {
         if (nodeName === 'a') {
-            return Entity.create(
+            return createEntity(
                 'LINK',
                 'MUTABLE',
                 {url: node.href}
             )
         }
     },
-    textToEntity: (text) => {
+    textToEntity: (text, createEntity) => {
         const result = [];
         text.replace(/\@(\w+)/g, (match, name, offset) => {
-            const entityKey = Entity.create(
+            const entityKey = createEntity(
                 'AT-MENTION',
                 'IMMUTABLE',
                 {name}
@@ -145,27 +145,41 @@ const contentState = convertFromHTML({
     }
 })(html);
 
-// convert HTML to ContentState with functionality defined in the plugins applied
-const contentState = compose(
+// convert HTML to ContentState with functionality defined in the draft-extend plugins applied
+const fromHTML = compose(
     FirstPlugin,
     SecondPlugin,
     ThirdPlugin
 )(convertFromHTML);
+const contentState = fromHTML(html);
 ```
 
 If no additional functionality is necessary `convertToHTML` can be invoked with just an HTML string to deserialize using just the default Draft functionality. Any `convertFromHTML` can be passed as an argument to a plugin to modularly augment its functionality. A `flat` option may be provided to force nested block elements to split into flat, separate blocks. For example, the HTML input `<p>line one<br />linetwo</p>` will produce two `unstyled` blocks in `flat` mode.
 
 **Type info:**
 ```javascript
-type HTMLConverter = (html: string, {flat: ?boolean}, DOMBuilder: ?Function) => ContentState
+type HTMLConverter = (html: string, {flat: ?boolean}, DOMBuilder: ?Function, generateKey: ?Function) => ContentState
 
 type EntityKey = string
 
 type convertFromHTML = HTMLConverter | ({
     htmlToStyle: ?(nodeName: string, node: Node) => DraftInlineStyle,
     htmlToBlock: ?(nodeName: string, node: Node) => ?(DraftBlockType | {type: DraftBlockType, data: object} | false),
-    htmlToEntity: ?(nodeName: string, node: string): ?EntityKey,
-    textToEntity: ?(text) => Array<{entity: EntityKey, offset: number, length: number, result: ?string}>
+    htmlToEntity: ?(
+        nodeName: string,
+        node: Node,
+        createEntity: (type: string, mutability: string, data: object) => EntityKey,
+        getEntity: (key: EntityKey) => Entity,
+        mergeEntityData: (key: string, data: object) => void,
+        replaceEntityData: (key: string, data: object) => void
+    ): ?EntityKey,
+    textToEntity: ?(
+        text: string,
+        createEntity: (type: string, mutability: string, data: object) => EntityKey,
+        getEntity: (key: EntityKey) => Entity,
+        mergeEntityData: (key: string, data: object) => void,
+        replaceEntityData: (key: string, data: object) => void
+    ) => Array<{entity: EntityKey, offset: number, length: number, result: ?string}>
 }) => HTMLConverter
 ```
 
